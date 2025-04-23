@@ -1,0 +1,61 @@
+name: OrionX Build CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build OrionX OS for M31
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git bc bison build-essential zip curl zlib1g-dev \
+          gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev \
+          libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip \
+          fontconfig python3 rsync flex libssl-dev schedtool openjdk-17-jdk
+        git config --global user.name "Yasser735"
+        git config --global user.email "yasser735@orionx.dev"
+
+    - name: Initialize repo
+      run: |
+        mkdir orionx && cd orionx
+        repo init -u https://github.com/AOSPAlliance/manifest.git -b android-14
+        repo sync -j$(nproc) --force-sync
+
+    - name: Clone device tree, vendor, kernel
+      run: |
+        cd orionx
+        git clone --depth=1 https://github.com/ProjectElixir-Devices/device_samsung_m31.git -b udc device/samsung/m31
+        git clone --depth=1 https://github.com/ProjectElixir-Devices/vendor_samsung_m31.git -b udc vendor/samsung/m31
+        git clone --depth=1 https://github.com/Yasser735/GrassKernel.git -b main kernel/samsung/m31
+        mv kernel/samsung/m31 kernel/samsung/m31_superx
+
+    - name: Apply SuperX Kernel tweaks
+      run: |
+        cd orionx/kernel/samsung/m31_superx
+        echo "# OrionX: Injecting SuperX optimizations..." >> README.md
+        # (tambahkan script modifikasi kernel di sini kalau perlu)
+
+    - name: Setup GApps
+      run: |
+        cd orionx
+        git clone https://github.com/opengapps/aosp_gapps.git -b master gapps
+
+    - name: Start build
+      run: |
+        cd orionx
+        source build/envsetup.sh
+        lunch aosp_m31-userdebug
+        make bacon -j$(nproc)
+
+    - name: Upload ROM
+      uses: actions/upload-artifact@v3
+      with:
+        name: OrionXOS-M31
+        path: orionx/out/target/product/m31/*.zip
